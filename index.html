@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>라이브 폴 · 실시간 참여</title>
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendard-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero-blobs">
+      <div class="b b1"></div><div class="b b2"></div><div class="b b3"></div>
+    </div>
+    <div class="center" style="margin-top:56px; margin-bottom:8px">
+      <div class="eyebrow">실시간 참여 · LIVE POLL</div>
+      <h1 style="font-size:64px">라이브 폴</h1>
+      <p class="muted" style="font-size:18px">질문을 던지면 수강생의 답이 실시간으로 한 화면에 모입니다.</p>
+    </div>
+
+    <div class="card center">
+      <h2>강사이신가요?</h2>
+      <p class="muted">세션을 만들고 질문을 진행하세요.</p>
+      <a class="btn" href="host.html">강사로 시작하기 →</a>
+    </div>
+
+    <p class="muted center" style="margin-top:8px">
+      수강생은 강사가 공유한 <b>참여 링크</b>로 바로 입장합니다 — 따로 코드를 입력할 필요가 없어요.
+    </p>
+  </div>
+
+  <script>
+    // 강사가 공유한 링크(?room=CODE)로 들어오면 곧장 참여 페이지로 (.html 없이 — 쿼리 보존)
+    const room = new URLSearchParams(location.search).get("room");
+    if (room) location.replace("play?room=" + encodeURIComponent(room.toUpperCase()));
+  </script>
+</body>
+</html>

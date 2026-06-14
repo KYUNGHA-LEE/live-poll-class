@@ -1,0 +1,9 @@
+# OS 부산물
+.DS_Store
+Thumbs.db
+
+# 의존성(현재 없음)
+node_modules/
+
+# 로컬 개발 도구 설정
+.claude/

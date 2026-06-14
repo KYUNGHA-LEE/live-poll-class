@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>참여 · 라이브 폴</title>
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendard-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap" style="max-width:560px">
+    <div id="err" class="err hidden"></div>
+
+    <!-- 이름 입력 -->
+    <section id="nameGate" class="card center hidden">
+      <h1>참여하기</h1>
+      <p class="muted">코드 <b id="codeShow"></b></p>
+      <label style="text-align:left">이름 (또는 익명)</label>
+      <input type="text" id="nameInput" placeholder="비워두면 익명으로 참여돼요" maxlength="20" />
+      <button id="joinBtn" style="margin-top:12px; width:100%">참여하기 →</button>
+    </section>
+
+    <!-- 참여 후 -->
+    <section id="live" class="hidden">
+      <div class="card row between">
+        <span class="pill" id="whoami">👤</span>
+        <span class="pill">참여 <b id="ptCount" style="margin-left:6px">0</b>명</span>
+      </div>
+
+      <div id="waiting" class="card waiting">
+        강사가 질문을 시작하기를 기다리는 중…
+      </div>
+
+      <div id="qcard" class="card hidden">
+        <div class="question-title" id="qTitle" style="font-size:24px"></div>
+        <div id="answerArea"></div>
+        <p id="doneMsg" class="muted center hidden" style="margin-top:14px">✅ 제출됐어요! 언제든 바꿀 수 있어요.</p>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="play.js"></script>
+</body>
+</html>
