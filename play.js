@@ -123,25 +123,35 @@ function renderQuestion() {
     area.appendChild(grid);
 
   } else if (s.type === "postit") {
+    // 진짜 포스트잇에 펜으로 적는 느낌의 입력 카드
+    const note = document.createElement("div");
+    note.className = "postit-compose";
     const input = document.createElement("textarea");
     input.rows = 4;
-    input.placeholder = "짧은 문장으로 적어주세요";
+    input.placeholder = "여기에 적어서 붙여요 ✍️";
     input.maxLength = 120;
     if (mine !== undefined) input.value = mine;
+    const counter = document.createElement("div");
+    counter.className = "postit-count";
+    const updateCount = () => { counter.textContent = input.value.length + " / 120"; };
+    updateCount();
+    input.addEventListener("input", updateCount);
+    note.append(input, counter);
+
     const btn = document.createElement("button");
-    btn.textContent = mine === undefined ? "붙이기" : "수정";
-    btn.style.marginTop = "10px";
+    btn.textContent = mine === undefined ? "📌 붙이기" : "✏️ 수정하기";
+    btn.style.cssText = "margin-top:18px; width:100%";
     const send = () => {
       const v = input.value.trim();
-      if (!v) return;
+      if (!v) { input.focus(); return; }
       submit(s.id, v);
-      btn.textContent = "수정";
+      btn.textContent = "✏️ 수정하기";
     };
     btn.onclick = send;
     input.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") send();
     });
-    area.append(input, btn);
+    area.append(note, btn);
 
   } else { // open (단답형)
     const input = document.createElement("input");
