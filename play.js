@@ -122,7 +122,28 @@ function renderQuestion() {
     });
     area.appendChild(grid);
 
-  } else { // open (주관식)
+  } else if (s.type === "postit") {
+    const input = document.createElement("textarea");
+    input.rows = 4;
+    input.placeholder = "짧은 문장으로 적어주세요";
+    input.maxLength = 120;
+    if (mine !== undefined) input.value = mine;
+    const btn = document.createElement("button");
+    btn.textContent = mine === undefined ? "붙이기" : "수정";
+    btn.style.marginTop = "10px";
+    const send = () => {
+      const v = input.value.trim();
+      if (!v) return;
+      submit(s.id, v);
+      btn.textContent = "수정";
+    };
+    btn.onclick = send;
+    input.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") send();
+    });
+    area.append(input, btn);
+
+  } else { // open (단답형)
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "답을 입력하세요";

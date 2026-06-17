@@ -2,7 +2,7 @@ import {
   db, ref, set, get, update, push, remove, onValue, serverTimestamp,
   ensureAuth, configLooksUnset, makeRoomCode, DEMO
 } from "./firebase.js";
-import { extractWords, renderCloud } from "./util.js";
+import { extractWords, groupPostIts, renderCloud } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
 const showErr = (msg) => { const e = $("err"); e.textContent = msg; e.classList.remove("hidden"); };
@@ -26,6 +26,7 @@ let participantIds = [];     // 현재 접속 중인 참여자 uid 목록
 let participantsData = {};   // {uid: {name, anon, ts}}
 let responses = {};         // {uid: value} (현재 슬라이드)
 let unsubResponses = null;
+let editingId = null;        // 내용 수정 중인 슬라이드 id (null = 편집 중 아님)
 
 // ---------- 부팅 ----------
 (async function boot() {
@@ -47,14 +48,26 @@ let unsubResponses = null;
 })();
 
 $("createBtn").onclick = async () => {
-  code = makeRoomCode();
-  await set(ref(db, `rooms/${code}`), {
-    meta: { hostId: uid, createdAt: serverTimestamp() },
-    state: { currentOrder: -1 }
-  });
-  localStorage.setItem("livepoll_host_room", code);
-  enterRoom(code);
+  try {
+    code = await createRoom();
+    localStorage.setItem("livepoll_host_room", code);
+    enterRoom(code);
+  } catch (e) {
+    showErr("세션을 만들지 못했어요. 잠시 후 다시 시도해 주세요. (" + e.message + ")");
+  }
 };
+
+async function createRoom() {
+  for (let i = 0; i < 8; i++) {
+    const roomCode = makeRoomCode();
+    const snap = await get(ref(db, `rooms/${roomCode}/meta`));
+    if (snap.exists()) continue;
+    await set(ref(db, `rooms/${roomCode}/meta`), { hostId: uid, createdAt: serverTimestamp() });
+    await set(ref(db, `rooms/${roomCode}/state`), { currentOrder: -1 });
+    return roomCode;
+  }
+  throw new Error("세션 ID를 만들 수 없습니다");
+}
 
 // ---------- 방 입장 + 리스너 ----------
 function enterRoom(roomCode) {
@@ -65,7 +78,9 @@ function enterRoom(roomCode) {
   // 현재 폴더 경로만 남기고 파일명(host / host.html 등)을 떼어 안전하게 조합.
   // .html 을 붙이면 serve가 /play 로 리다이렉트하며 ?room= 쿼리를 버리므로, 깔끔한 주소로 만든다.
   const dir = location.pathname.replace(/[^/]*$/, "");
-  const joinUrl = location.origin + dir + "play?room=" + code;
+  const joinParams = new URLSearchParams({ room: code });
+  if (DEMO) joinParams.set("demo", "1");
+  const joinUrl = location.origin + dir + "play?" + joinParams.toString();
   $("joinLink").value = joinUrl;
   $("joinOpen").href = joinUrl;
   $("qr").src = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(joinUrl);
@@ -125,37 +140,158 @@ $("addBtn").onclick = async () => {
   $("err").classList.add("hidden");
 };
 
+const SLIDE_LABELS = { yesno: "Yes/No", choice: "4지선다", open: "단답형", postit: "포스트잇" };
+let dragId = null;          // 드래그 중인 슬라이드 id
+
 function renderSlideList() {
   const box = $("slideList");
   if (!slides.length) { box.innerHTML = `<p class="muted">아직 슬라이드가 없습니다.</p>`; return; }
-  const labels = { yesno: "Yes/No", choice: "4지선다", open: "주관식" };
   box.innerHTML = "";
   slides.forEach((s) => {
+    if (s.id === editingId) { box.appendChild(buildEditor(s)); return; }
+
     const div = document.createElement("div");
     div.className = "slide-item" + (s.order === currentOrder ? " active" : "");
-    div.innerHTML = `
-      <div class="row" style="gap:10px">
-        <span class="tag ${s.type}">${labels[s.type]}</span>
-        <b>${s.order + 1}. ${escapeHtml(s.q)}</b>
-      </div>`;
-    const right = document.createElement("div");
-    right.className = "row";
-    const goBtn = document.createElement("button");
-    goBtn.className = "ghost"; goBtn.textContent = "이동"; goBtn.style.padding = "8px 12px";
-    goBtn.onclick = () => setOrder(s.order);
-    const del = document.createElement("button");
-    del.className = "danger"; del.textContent = "🗑"; del.style.padding = "8px 12px";
-    del.onclick = () => deleteSlide(s);
-    right.append(goBtn, del);
-    div.appendChild(right);
+    div.draggable = true;
+    div.dataset.id = s.id;
+    div.addEventListener("dragstart", (e) => {
+      dragId = s.id; div.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", s.id); // Firefox는 데이터 설정이 있어야 드래그 시작
+    });
+    div.addEventListener("dragend", () => {
+      dragId = null; div.classList.remove("dragging");
+      [...box.children].forEach(c => c.classList.remove("drag-over"));
+    });
+    div.addEventListener("dragover", (e) => {
+      if (!dragId || dragId === s.id) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = "move";
+      div.classList.add("drag-over");
+    });
+    div.addEventListener("dragleave", () => div.classList.remove("drag-over"));
+    div.addEventListener("drop", (e) => {
+      e.preventDefault(); div.classList.remove("drag-over"); dropOn(s.id);
+    });
+
+    const handle = document.createElement("span");
+    handle.textContent = "⠿"; handle.title = "드래그해서 순서를 바꾸세요";
+    handle.style.cssText = "cursor:grab; color:var(--muted); font-size:18px; line-height:1; user-select:none; flex:0 0 auto";
+
+    const meta = document.createElement("span");
+    meta.innerHTML = `<span class="tag ${s.type}">${SLIDE_LABELS[s.type]}</span> <b>${s.order + 1}. ${escapeHtml(s.q)}</b>`;
+    meta.style.cssText = "display:inline-flex; align-items:center; gap:8px; flex:1 1 auto; min-width:0";
+
+    // 박스 전체: 클릭 → 수정, 드래그 → 순서 이동 (목록에 버튼 없음)
+    div.classList.add("clickable");
+    div.title = "클릭해 수정 · 드래그해 순서 변경";
+    div.onclick = () => { editingId = s.id; renderSlideList(); };
+
+    div.append(handle, meta);
     box.appendChild(div);
   });
 }
 
+// 드래그한 슬라이드(dragId)를 targetId 위치로 옮긴다. 순서가 바뀐 슬라이드만 DB에 기록.
+async function dropOn(targetId) {
+  if (!dragId || dragId === targetId) return;
+  const from = slides.findIndex(s => s.id === dragId);
+  const to = slides.findIndex(s => s.id === targetId);
+  if (from < 0 || to < 0) return;
+  const liveId = activeSlide()?.id;   // 지금 띄워둔 슬라이드는 내용 그대로 따라가게
+
+  const reordered = slides.slice();
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+
+  await Promise.all(reordered.map((s, order) => (
+    s.order === order ? Promise.resolve()
+      : set(ref(db, `rooms/${code}/slides/${s.id}/order`), order)
+  )));
+  if (liveId) {
+    const newOrder = reordered.findIndex(s => s.id === liveId);
+    if (newOrder >= 0 && newOrder !== currentOrder) {
+      await update(ref(db, `rooms/${code}/state`), { currentOrder: newOrder });
+    }
+  }
+  dragId = null;
+}
+
+// 내용 수정용 인라인 에디터 (질문 + 4지선다면 보기). 유형은 바꾸지 않음.
+function buildEditor(s) {
+  const div = document.createElement("div");
+  div.className = "slide-item";
+  div.style.cssText = "flex-direction:column; align-items:stretch; gap:10px";
+
+  const head = document.createElement("div");
+  head.className = "row"; head.style.gap = "10px";
+  head.innerHTML = `<span class="tag ${s.type}">${SLIDE_LABELS[s.type]}</span> <b>${s.order + 1}번 슬라이드 수정</b>`;
+
+  const qInput = document.createElement("input");
+  qInput.type = "text"; qInput.value = s.q;
+  qInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && s.type !== "choice") saveEdit(s, qInput, null); });
+
+  let optInput = null, optLabel = null;
+  if (s.type === "choice") {
+    optLabel = document.createElement("label"); optLabel.textContent = "보기 (한 줄에 하나)";
+    optInput = document.createElement("textarea");
+    optInput.rows = 4; optInput.value = (s.options || []).join("\n");
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "row"; actions.style.gap = "8px";
+  const save = document.createElement("button");
+  save.textContent = "저장"; save.style.padding = "8px 18px";
+  save.onclick = () => saveEdit(s, qInput, optInput);
+  const cancel = document.createElement("button");
+  cancel.className = "ghost"; cancel.textContent = "취소"; cancel.style.padding = "8px 18px";
+  cancel.onclick = () => { editingId = null; $("err").classList.add("hidden"); renderSlideList(); };
+  const present = document.createElement("button");
+  present.className = "ghost"; present.textContent = "▶ 학생에게 띄우기"; present.style.cssText = "padding:8px 16px; margin-left:auto";
+  present.title = "이 슬라이드를 학생 화면에 표시";
+  present.onclick = () => { editingId = null; setOrder(s.order); };
+  const del = document.createElement("button");
+  del.className = "danger"; del.textContent = "삭제"; del.style.padding = "8px 16px";
+  del.onclick = () => deleteSlide(s);
+  actions.append(save, cancel, present, del);
+
+  div.append(head, qInput);
+  if (optInput) div.append(optLabel, optInput);
+  div.append(actions);
+  return div;
+}
+
+async function saveEdit(s, qInput, optInput) {
+  const q = qInput.value.trim();
+  if (!q) { qInput.focus(); return; }
+  const patch = { q };
+  if (s.type === "choice") {
+    const opts = optInput.value.split("\n").map(t => t.trim()).filter(Boolean);
+    if (opts.length < 2) { showErr("4지선다는 보기를 2개 이상 입력하세요."); return; }
+    patch.options = opts;
+  }
+  await update(ref(db, `rooms/${code}/slides/${s.id}`), patch);
+  editingId = null;
+  $("err").classList.add("hidden");
+}
+
 async function deleteSlide(s) {
   if (!confirm(`"${s.q}" 슬라이드를 삭제할까요?`)) return;
+  const remaining = slides.filter(slide => slide.id !== s.id);
+  let nextOrder = currentOrder;
+  if (!remaining.length) nextOrder = -1;
+  else if (currentOrder === s.order) nextOrder = Math.min(s.order, remaining.length - 1);
+  else if (currentOrder > s.order) nextOrder = currentOrder - 1;
+  nextOrder = Math.max(-1, Math.min(nextOrder, remaining.length - 1));
+
   await remove(ref(db, `rooms/${code}/slides/${s.id}`));
   await remove(ref(db, `rooms/${code}/responses/${s.id}`));
+  await Promise.all(remaining.map((slide, order) => (
+    slide.order === order
+      ? Promise.resolve()
+      : set(ref(db, `rooms/${code}/slides/${slide.id}/order`), order)
+  )));
+  await update(ref(db, `rooms/${code}/state`), { currentOrder: nextOrder });
+  editingId = null;
 }
 
 // ---------- 진행 ----------
@@ -259,10 +395,12 @@ function renderResults() {
     ]);
   } else if (s.type === "choice") {
     const counts = (s.options || []).map(opt => entries.filter(v => v === opt).length);
-    const total = Math.max(1, ...counts);
+    const total = Math.max(1, entries.length);
     box.innerHTML = barsHtml((s.options || []).map((opt, i) => ({
       label: opt, count: counts[i], cls: "", total
     })));
+  } else if (s.type === "postit") {
+    renderPostItGroups(box, groupPostIts(entries));
   } else { // open
     if (!box.querySelector(".cloud")) box.innerHTML = `<div class="cloud" id="cloud"></div>`;
     renderCloudThrottled($("cloud") || box, extractWords(entries), { minPx: 18, maxPx: 96 });
@@ -277,6 +415,23 @@ function renderCloudThrottled(el, words, opts) {
   const run = () => { _cloudLast = Date.now(); renderCloud(el, words, opts); };
   if (now - _cloudLast >= gap) run();
   else _cloudTimer = setTimeout(run, gap - (now - _cloudLast));
+}
+
+function renderPostItGroups(box, groups) {
+  if (!groups.length) {
+    box.innerHTML = `<p class="empty">아직 포스트잇이 없어요…</p>`;
+    return;
+  }
+  box.innerHTML = `<div class="postit-board">` + groups.map((g) => `
+    <section class="postit-cluster">
+      <div class="postit-cluster-head">
+        <b>${escapeHtml(g.label)}</b>
+        <span>${g.count}개</span>
+      </div>
+      <div class="postit-stack">
+        ${g.items.map((text) => `<div class="postit-note">${escapeHtml(text)}</div>`).join("")}
+      </div>
+    </section>`).join("") + `</div>`;
 }
 
 function barsHtml(rows) {

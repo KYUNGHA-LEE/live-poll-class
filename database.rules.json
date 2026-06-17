@@ -1,0 +1,36 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": true,
+        "meta": {
+          ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() === auth.uid) || data.child('hostId').val() === auth.uid)",
+          "hostId": {
+            ".validate": "newData.val() === auth.uid || data.val() === newData.val()"
+          },
+          "createdAt": {
+            ".validate": "newData.exists()"
+          }
+        },
+        "state": {
+          ".write": "auth != null && root.child('rooms').child($room).child('meta').child('hostId').val() === auth.uid"
+        },
+        "slides": {
+          ".write": "auth != null && root.child('rooms').child($room).child('meta').child('hostId').val() === auth.uid"
+        },
+        "participants": {
+          "$uid": {
+            ".write": "auth != null && ($uid === auth.uid || root.child('rooms').child($room).child('meta').child('hostId').val() === auth.uid)"
+          }
+        },
+        "responses": {
+          "$slide": {
+            "$uid": {
+              ".write": "auth != null && ($uid === auth.uid || root.child('rooms').child($room).child('meta').child('hostId').val() === auth.uid)"
+            }
+          }
+        }
+      }
+    }
+  }
+}

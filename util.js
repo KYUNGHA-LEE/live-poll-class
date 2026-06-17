@@ -1,4 +1,4 @@
-// 공통 유틸: 한국어 단어 추출(주관식 워드클라우드용) + 워드클라우드 렌더링
+// 공통 유틸: 한국어 단어 추출(단답형 워드클라우드용) + 포스트잇 그룹핑 + 워드클라우드 렌더링
 
 // 의미 없는 단어(불용어). 너무 흔하거나 그 자체로 의미가 약한 것들.
 const STOPWORDS = new Set([
@@ -171,4 +171,121 @@ function renderSpiral(container, items, W, H, opts) {
     span.style.top = y + "px";
     placed.push({ x, y, w, h });
   });
+}
+
+const POSTIT_CONCEPTS = [
+  { label: "이해", words: ["이해", "설명", "개념", "정리", "명확", "쉽", "알겠", "납득"] },
+  { label: "어려움", words: ["어렵", "힘들", "헷갈", "모르", "복잡", "막히", "혼란", "부담"] },
+  { label: "속도", words: ["빠르", "느리", "속도", "진도", "템포", "천천히", "급하"] },
+  { label: "시간", words: ["시간", "부족", "여유", "짧", "길", "마감", "일정"] },
+  { label: "실습", words: ["실습", "연습", "해보", "따라", "코딩", "작업", "직접"] },
+  { label: "예시", words: ["예시", "사례", "샘플", "보기", "데모", "응용"] },
+  { label: "자료", words: ["자료", "문서", "슬라이드", "파일", "가이드", "링크", "노트"] },
+  { label: "참여", words: ["참여", "질문", "토론", "의견", "소통", "대화", "피드백"] },
+  { label: "재미", words: ["재미", "흥미", "재밌", "즐겁", "몰입", "신기"] },
+  { label: "환경", words: ["설치", "환경", "오류", "에러", "접속", "인터넷", "기기"] },
+  { label: "복습", words: ["복습", "요약", "정리", "다시", "반복", "기억"] }
+];
+
+function tokenizeText(text) {
+  return String(text)
+    .split(/[\s,.!?·…/\\()\[\]{}'"“”‘’~\-:;]+/)
+    .map(normalizeToken)
+    .filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+}
+
+function bigrams(text) {
+  const compact = String(text).toLowerCase().replace(/[^가-힣a-z0-9]/g, "");
+  const grams = [];
+  for (let i = 0; i < compact.length - 1; i++) grams.push(compact.slice(i, i + 2));
+  return grams;
+}
+
+function makePostItProfile(text) {
+  const tokens = new Set(tokenizeText(text));
+  const plain = String(text).toLowerCase().replace(/\s+/g, "");
+  const concepts = new Set();
+
+  for (const concept of POSTIT_CONCEPTS) {
+    if (concept.words.some((word) => plain.includes(word) || tokens.has(normalizeToken(word)))) {
+      concepts.add(concept.label);
+    }
+  }
+
+  const features = new Set([...tokens].map((t) => "t:" + t));
+  for (const concept of concepts) features.add("c:" + concept);
+  if (features.size < 3) {
+    for (const gram of bigrams(text)) features.add("b:" + gram);
+  }
+
+  return { tokens, concepts, features };
+}
+
+function overlapScore(a, b) {
+  if (!a.size || !b.size) return 0;
+  let hit = 0;
+  for (const x of a) if (b.has(x)) hit++;
+  return hit / Math.min(a.size, b.size);
+}
+
+function hasOverlap(a, b) {
+  for (const x of a) if (b.has(x)) return true;
+  return false;
+}
+
+function postItSimilarity(profile, group) {
+  const featureScore = overlapScore(profile.features, group.features);
+  const tokenScore = overlapScore(profile.tokens, group.tokens);
+  const conceptScore = hasOverlap(profile.concepts, group.concepts) ? 0.44 + tokenScore * 0.2 : 0;
+  return Math.max(featureScore, tokenScore, conceptScore);
+}
+
+function addToPostItGroup(group, text, profile) {
+  group.items.push(text);
+  for (const t of profile.tokens) group.tokens.add(t);
+  for (const c of profile.concepts) group.concepts.add(c);
+  for (const f of profile.features) group.features.add(f);
+}
+
+function postItLabel(group) {
+  const conceptCounts = new Map();
+  const tokenCounts = new Map();
+
+  for (const item of group.items) {
+    const profile = makePostItProfile(item);
+    for (const c of profile.concepts) conceptCounts.set(c, (conceptCounts.get(c) || 0) + 1);
+    for (const t of profile.tokens) tokenCounts.set(t, (tokenCounts.get(t) || 0) + 1);
+  }
+
+  const topConcept = [...conceptCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  if (topConcept) return topConcept[0];
+
+  const topTokens = [...tokenCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 2)
+    .map(([t]) => t);
+  return topTokens.length ? topTokens.join(" · ") : "기타 의견";
+}
+
+export function groupPostIts(answers) {
+  const groups = [];
+  const notes = answers.map((v) => String(v || "").trim()).filter(Boolean);
+
+  for (const text of notes) {
+    const profile = makePostItProfile(text);
+    let best = null;
+    let bestScore = 0;
+
+    for (const group of groups) {
+      const score = postItSimilarity(profile, group);
+      if (score > bestScore) { best = group; bestScore = score; }
+    }
+
+    if (best && bestScore >= 0.42) addToPostItGroup(best, text, profile);
+    else groups.push({ items: [text], tokens: new Set(profile.tokens), concepts: new Set(profile.concepts), features: new Set(profile.features) });
+  }
+
+  return groups
+    .map((group, index) => ({ label: postItLabel(group), count: group.items.length, items: group.items, index }))
+    .sort((a, b) => b.count - a.count || a.index - b.index);
 }

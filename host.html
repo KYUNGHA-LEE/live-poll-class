@@ -16,14 +16,14 @@
     <!-- 1) 세션 없음: 새로 만들기 -->
     <section id="setup" class="card center hidden">
       <h1>강사 세션</h1>
-      <p class="muted">새 세션을 만들면 학생들이 참여할 코드가 생성됩니다.</p>
+      <p class="muted">새 세션을 만들면 학생들에게 공유할 참여 링크와 QR이 생성됩니다.</p>
       <button id="createBtn">+ 새 세션 만들기</button>
     </section>
 
     <!-- 2) 세션 있음 -->
     <section id="dash" class="hidden">
       <div class="card">
-        <div class="row between" style="gap:28px; align-items:center">
+        <div class="row between host-share-row">
           <div style="flex:1; min-width:260px">
             <div class="eyebrow">수강생 참여 링크 — 이 링크만 공유하세요</div>
             <div class="row" style="gap:8px; margin-top:10px; flex-wrap:nowrap">
@@ -65,7 +65,8 @@
           <select id="qType">
             <option value="yesno">Yes / No (초기값 No → Yes로)</option>
             <option value="choice">4지선다 (많을수록 크게)</option>
-            <option value="open">주관식 (워드클라우드)</option>
+            <option value="open">단답형 (워드클라우드)</option>
+            <option value="postit">포스트잇 (비슷한 문장끼리 묶기)</option>
           </select>
           <label>질문</label>
           <input type="text" id="qText" placeholder="예: 실습 다 하셨나요?" />

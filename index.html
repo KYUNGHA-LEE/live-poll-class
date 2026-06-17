@@ -25,14 +25,16 @@
     </div>
 
     <p class="muted center" style="margin-top:8px">
-      수강생은 강사가 공유한 <b>참여 링크</b>로 바로 입장합니다 — 따로 코드를 입력할 필요가 없어요.
+      수강생은 강사가 공유한 <b>참여 링크</b>나 <b>QR</b>로 바로 입장합니다.
     </p>
   </div>
 
   <script>
     // 강사가 공유한 링크(?room=CODE)로 들어오면 곧장 참여 페이지로 (.html 없이 — 쿼리 보존)
-    const room = new URLSearchParams(location.search).get("room");
-    if (room) location.replace("play?room=" + encodeURIComponent(room.toUpperCase()));
+    const params = new URLSearchParams(location.search);
+    const demoSuffix = params.has("demo") ? "&demo=1" : "";
+    const room = params.get("room");
+    if (room) location.replace("play?room=" + encodeURIComponent(room.toUpperCase()) + demoSuffix);
   </script>
 </body>
 </html>
