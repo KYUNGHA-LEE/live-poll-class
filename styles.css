@@ -320,6 +320,64 @@ input[type=text].code-entry::placeholder {
 /* ---- Misc ---- */
 .hidden { display: none !important; }
 .waiting { text-align: center; padding: 64px 20px; color: var(--muted); font-size: 20px; font-family: var(--font-serif); }
+
+/* ---- 학생 대기 화면 일러스트 (글자 대신 통통 뛰는 캐릭터) ---- */
+.wait-art { text-align: center; padding: 34px 20px 28px; }
+.wait-svg { width: 100%; max-width: 260px; height: auto; overflow: visible; }
+.wait-cap {
+  margin: 4px 0 0; color: var(--muted);
+  font-family: var(--font-serif); font-size: 17px;
+}
+
+.wait-blob  { fill: var(--color-hi-yellow); }
+.wait-cheek { fill: var(--color-fuchsia); opacity: .45; }
+.wait-eyes circle { fill: var(--color-deep-ink); }
+.wait-mouth { fill: none; stroke: var(--color-deep-ink); stroke-width: 3; stroke-linecap: round; }
+.wait-bubble-box { fill: #fff; stroke: var(--border); stroke-width: 1.5; }
+.wait-dot { fill: var(--color-deep-ink); }
+.wait-shadow { fill: var(--color-deep-ink); }
+
+.wait-body, .wait-shadow, .wait-eyes, .wait-dot, .wait-bubble {
+  transform-box: fill-box;      /* iOS 사파리에서도 도형 기준으로 변형되게 */
+}
+.wait-body   { transform-origin: 50% 100%; animation: waitHop 1.6s ease-in-out infinite; }
+.wait-shadow { transform-origin: 50% 50%;  animation: waitShadow 1.6s ease-in-out infinite; }
+.wait-eyes   { transform-origin: 50% 50%;  animation: waitBlink 4.2s ease-in-out infinite; }
+.wait-bubble { transform-origin: 0% 100%;  animation: waitBubble 3.2s ease-in-out infinite; }
+.wait-dot    { animation: waitDot 1.4s ease-in-out infinite; }
+.wait-dot.d2 { animation-delay: .18s; }
+.wait-dot.d3 { animation-delay: .36s; }
+
+@keyframes waitHop {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  25%      { transform: translateY(-13px) scale(.97, 1.05); }
+  50%      { transform: translateY(0) scale(1.06, .93); }
+  72%      { transform: translateY(-4px) scale(1, 1); }
+}
+@keyframes waitShadow {
+  0%, 100% { transform: scale(1);   opacity: .13; }
+  25%      { transform: scale(.78); opacity: .06; }
+  50%      { transform: scale(1.07); opacity: .16; }
+}
+@keyframes waitBlink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(.1); }
+}
+@keyframes waitBubble {
+  0%, 100% { transform: rotate(0deg)   translateY(0); }
+  50%      { transform: rotate(-2.5deg) translateY(-4px); }
+}
+@keyframes waitDot {
+  0%, 60%, 100% { transform: translateY(0);    opacity: .28; }
+  30%           { transform: translateY(-7px); opacity: 1; }
+}
+
+/* 움직임을 줄이는 설정을 켠 기기에서는 가만히 있게 */
+@media (prefers-reduced-motion: reduce) {
+  .wait-body, .wait-shadow, .wait-eyes, .wait-bubble, .wait-dot { animation: none; }
+  .wait-shadow { opacity: .13; }
+  .wait-dot { opacity: .55; }
+}
 .toast {
   position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
   background: var(--color-hi-yellow); color: var(--color-deep-ink);

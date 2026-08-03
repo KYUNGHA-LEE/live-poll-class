@@ -51,8 +51,31 @@
         <span class="pill">참여 <b id="ptCount" style="margin-left:6px">0</b>명</span>
       </div>
 
-      <div id="waiting" class="card waiting">
-        강사가 질문을 시작하기를 기다리는 중…
+      <!-- 대기 화면: 글자 대신 통통 뛰며 기다리는 캐릭터 -->
+      <div id="waiting" class="card wait-art">
+        <svg class="wait-svg" viewBox="0 0 220 168" role="img" aria-label="곧 질문이 나옵니다. 잠시만 기다려 주세요.">
+          <ellipse class="wait-shadow" cx="78" cy="143" rx="35" ry="7" />
+
+          <g class="wait-bubble">
+            <path class="wait-bubble-box"
+                  d="M139 40h56a15 15 0 0 1 15 15v26a15 15 0 0 1-15 15h-38l-15 13v-13h-3a15 15 0 0 1-15-15V55a15 15 0 0 1 15-15z" />
+            <circle class="wait-dot d1" cx="154" cy="68" r="6" />
+            <circle class="wait-dot d2" cx="174" cy="68" r="6" />
+            <circle class="wait-dot d3" cx="194" cy="68" r="6" />
+          </g>
+
+          <g class="wait-body">
+            <path class="wait-blob" d="M78 58c24 0 42 16 41 41s-18 40-42 40-40-16-39-42 16-39 40-39z" />
+            <circle class="wait-cheek" cx="55" cy="108" r="6.5" />
+            <circle class="wait-cheek" cx="101" cy="108" r="6.5" />
+            <g class="wait-eyes">
+              <circle cx="66" cy="94" r="5.5" />
+              <circle cx="90" cy="94" r="5.5" />
+            </g>
+            <path class="wait-mouth" d="M71 107q7 7 14 0" />
+          </g>
+        </svg>
+        <p class="wait-cap">곧 시작해요</p>
       </div>
 
       <div id="qcard" class="card hidden">
