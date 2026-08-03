@@ -2,6 +2,18 @@
 
 멘티미터/슬라이도 같은 **실시간 참여형 웹앱**. 강사가 질문을 던지면 학생들의 답이 한 화면에 실시간으로 모입니다.
 
+## 🔑 접속 방법 (중요)
+
+| 누가 | 주소 |
+|------|------|
+| **학생** | `https://live-poll-class.vercel.app/` — 주소만 치면 **참여 코드 입력 화면** |
+| **강사** | `https://live-poll-class.vercel.app/?mode=admin` — 강사 화면 (비밀번호 없음) |
+
+- 학생 화면에는 강사로 들어가는 버튼·링크가 **전혀 없습니다.** 쿼리를 아는 사람만 강사 화면에 들어갑니다.
+- 강사 화면에 뜬 **참여 코드**를 알려주거나, **링크/QR**을 공유하면 됩니다. 링크·QR로 들어온 학생은 코드 입력을 건너뜁니다.
+- 예전에 공유한 `/play?room=코드` 링크·QR도 그대로 동작합니다 (새 주소로 자동 연결).
+
+
 - **Yes/No** — 처음엔 모두 `No`, 학생이 Yes를 누를수록 Yes 막대가 커짐
 - **4지선다** — 많이 고른 보기일수록 막대가 길어짐
 - **단답형** — 많이 나온 단어일수록 크게 (워드클라우드, 조사·어미·불용어 자동 제거)
@@ -51,12 +63,12 @@ npx serve .
 
 브라우저에서 안내된 주소(예: `http://localhost:3000`)로 접속.
 
-> 참고: 학생 참여 링크는 `.html` 없는 깔끔한 주소(`/play?room=코드`)를 씁니다.
-> `serve`는 `/play.html?room=…` 을 `/play` 로 리다이렉트하면서 코드(`?room=`)를 버리기 때문이에요.
-> (`python -m http.server` 같은 서버는 클린 URL을 지원하지 않으니 `npx serve` 를 권장합니다.)
+> 참고: `?mode=admin` 은 `.html` 없는 깔끔한 주소(`/host`)로 넘어갑니다.
+> `python -m http.server` 같은 서버는 클린 URL을 지원하지 않아 `/host` 가 404가 되니 **`npx serve`** 를 쓰세요.
+> (Vercel은 `vercel.json` 의 `cleanUrls` 로 처리됩니다.)
 
-- 강사: `index.html` → "강사로 시작하기"
-- 학생: 강사 화면의 링크/QR로 참여 (다른 기기·시크릿창에서 테스트)
+- 강사: `http://localhost:3000/?mode=admin`
+- 학생: `http://localhost:3000/` → 코드 입력, 또는 강사 화면의 링크/QR로 참여 (다른 기기·시크릿창에서 테스트)
 
 ### 🧪 데모 모드 (Firebase 없이 바로 체험)
 
@@ -88,9 +100,10 @@ npx serve .
 
 | 파일 | 역할 |
 |------|------|
-| `index.html` | 진입(강사 시작, 공유 링크 입장 처리) |
+| `index.html` | **학생 화면** (코드 입장 / `?room=` 바로 입장 / `?mode=admin` → 강사) |
 | `host.html` / `host.js` | 강사: 슬라이드 작성·진행·실시간 결과 |
-| `play.html` / `play.js` | 학생: 참여·답변 |
+| `play.js` | 학생 참여·답변 로직 (`index.html` 이 불러옴) |
+| `play.html` | 예전 `/play?room=` 링크·QR 호환용 리다이렉트 |
 | `firebase.js` | Firebase 초기화 + 공통 헬퍼 |
 | `firebase-config.js` | **내 Firebase 키 (직접 입력)** |
 | `database.rules.json` / `firebase.json` | Realtime Database 보안 규칙 배포 설정 |

@@ -164,6 +164,16 @@ label {
 }
 .count-big { font-size: 52px; line-height: 1; }
 
+/* 학생 참여 코드 입력칸 */
+input[type=text].code-entry {
+  font-size: 34px; font-weight: 800; letter-spacing: 6px;
+  text-align: center; text-transform: uppercase;
+  padding: 16px 18px; margin-top: 16px;
+}
+input[type=text].code-entry::placeholder {
+  font-size: 22px; font-weight: 500; letter-spacing: 4px;
+}
+
 /* ---- Slide list ---- */
 .slide-item {
   display: flex; gap: 12px 10px; align-items: center; justify-content: space-between;
@@ -332,4 +342,5 @@ hr { border: none; border-top: 1px solid var(--border); }
 .hero-blobs .b3 { width: 180px; height: 180px; bottom: 40px; left: 40%; background: var(--color-hi-yellow); border-radius: 52% 48% 40% 60% / 45% 58% 42% 55%; }
 @media (max-width: 720px) {
   .host-share-row { align-items: stretch; }
+  .code-badge { font-size: 34px; letter-spacing: 5px; padding: 6px 16px; }
 }

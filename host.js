@@ -76,11 +76,13 @@ function enterRoom(roomCode) {
   $("dash").classList.remove("hidden");
 
   // 현재 폴더 경로만 남기고 파일명(host / host.html 등)을 떼어 안전하게 조합.
-  // .html 을 붙이면 serve가 /play 로 리다이렉트하며 ?room= 쿼리를 버리므로, 깔끔한 주소로 만든다.
+  // 학생 화면은 루트(index.html)이므로 파일명 없이 ?room= 만 붙인다.
   const dir = location.pathname.replace(/[^/]*$/, "");
   const joinParams = new URLSearchParams({ room: code });
   if (DEMO) joinParams.set("demo", "1");
-  const joinUrl = location.origin + dir + "play?" + joinParams.toString();
+  const joinUrl = location.origin + dir + "?" + joinParams.toString();
+  $("codeBadge").textContent = code;
+  $("siteHost").textContent = (location.host + dir).replace(/\/$/, "");
   $("joinLink").value = joinUrl;
   $("joinOpen").href = joinUrl;
   $("qr").src = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(joinUrl);

@@ -5,28 +5,54 @@ import {
 
 const $ = (id) => document.getElementById(id);
 const showErr = (msg) => { const e = $("err"); e.textContent = msg; e.classList.remove("hidden"); };
+const hideErr = () => $("err").classList.add("hidden");
 
-const code = (new URLSearchParams(location.search).get("room") || "").toUpperCase();
+let code = (new URLSearchParams(location.search).get("room") || "").toUpperCase();
 let uid = null;
 let slides = {};            // {id: slide}
 let currentOrder = -1;
 let myAnswers = {};         // {slideId: value}  (내 답)
 
 (async function boot() {
-  if (!code) { showErr("참여 코드가 없습니다. 강사가 준 링크나 코드로 다시 들어와 주세요."); return; }
   if (configLooksUnset() && !DEMO) { showErr("⚠️ firebase-config.js 설정이 필요합니다 (README 참고)."); return; }
 
   try { uid = await ensureAuth(); }
   catch (e) { showErr("접속 실패: " + e.message); return; }
 
-  const meta = await get(ref(db, `rooms/${code}/meta`));
-  if (!meta.exists()) { showErr(`'${code}' 세션을 찾을 수 없어요. 코드를 확인해 주세요.`); return; }
+  // 링크/QR(?room=CODE)로 들어왔으면 코드 입력을 건너뛴다.
+  if (code) { await openNameGate(code); return; }
 
-  $("codeShow").textContent = code;
-  const savedName = localStorage.getItem("livepoll_name") || "";
-  $("nameInput").value = savedName;
-  $("nameGate").classList.remove("hidden");
+  // 주소만 치고 들어온 학생 → 참여 코드부터 입력
+  $("codeInput").value = localStorage.getItem("livepoll_last_room") || "";
+  $("codeGate").classList.remove("hidden");
+  $("codeInput").focus();
 })();
+
+// ---------- 참여 코드 ----------
+async function openNameGate(input) {
+  const c = (input || "").trim().toUpperCase();
+  if (!c) { $("codeInput").focus(); return; }
+
+  const meta = await get(ref(db, `rooms/${c}/meta`));
+  if (!meta.exists()) { showErr(`'${c}' 세션을 찾을 수 없어요. 코드를 확인해 주세요.`); return; }
+
+  hideErr();
+  code = c;
+  localStorage.setItem("livepoll_last_room", c);
+  $("codeGate").classList.add("hidden");
+  $("codeShow").textContent = c;
+  $("nameInput").value = localStorage.getItem("livepoll_name") || "";
+  $("nameGate").classList.remove("hidden");
+  $("nameInput").focus();
+}
+
+$("codeInput").addEventListener("input", (e) => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+});
+$("codeBtn").onclick = () => openNameGate($("codeInput").value);
+$("codeInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") openNameGate($("codeInput").value);
+});
 
 function doJoin() {
   const name = $("nameInput").value.trim();
