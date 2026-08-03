@@ -26,7 +26,10 @@ let participantIds = [];     // 현재 접속 중인 참여자 uid 목록
 let participantsData = {};   // {uid: {name, anon, ts}}
 let responses = {};         // {uid: value} (현재 슬라이드)
 let unsubResponses = null;
+let respTargetId = null;     // 지금 응답을 구독 중인 대상 id
 let editingId = null;        // 내용 수정 중인 슬라이드 id (null = 편집 중 아님)
+let draft = null;            // 입력창에 타이핑 중인 질문 — 저장 전에도 학생 화면에 바로 보인다
+const DRAFT_ID = "__draft__";  // 초안에 달린 응답을 모아두는 자리
 
 // ---------- 부팅 ----------
 (async function boot() {
@@ -113,34 +116,104 @@ function enterRoom(roomCode) {
     renderPtList();
   });
 
-  // 현재 진행 슬라이드
-  onValue(ref(db, `rooms/${code}/state/currentOrder`), (snap) => {
-    currentOrder = snap.exists() ? snap.val() : -1;
+  // 현재 진행 슬라이드 + 타이핑 중인 초안
+  onValue(ref(db, `rooms/${code}/state`), (snap) => {
+    const v = snap.val() || {};
+    const nextOrder = typeof v.currentOrder === "number" ? v.currentOrder : -1;
+    const orderChanged = nextOrder !== currentOrder;
+    currentOrder = nextOrder;
+    draft = (v.draft && v.draft.q) ? v.draft : null;
     attachResponses();
-    renderSlideList();
+    // 초안 글자만 바뀐 경우엔 목록을 다시 그리지 않는다 (수정 중인 칸·드래그가 풀리지 않게)
+    if (orderChanged) renderSlideList();
     renderStage();
   });
+
+  // 새로고침으로 다시 들어왔으면 입력창은 비어 있으니 남아 있던 초안도 정리
+  update(ref(db, `rooms/${code}/state`), { draft: null });
+  remove(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
 }
 
-// ---------- 슬라이드 편집 ----------
+// ---------- 질문 입력 (타이핑 → 학생 화면 실시간, Enter → 슬라이드 저장) ----------
 $("qType").onchange = () => {
   $("optBox").classList.toggle("hidden", $("qType").value !== "choice");
+  queueDraft();
 };
 
-$("addBtn").onclick = async () => {
+function typedOptions() {
+  return $("qOpts").value.split("\n").map(s => s.trim()).filter(Boolean);
+}
+
+// 입력창에 지금 적혀 있는 내용 (비어 있으면 null)
+function typedDraft() {
+  const q = $("qText").value.trim();
+  if (!q) return null;
+  const type = $("qType").value;
+  const d = { type, q };
+  if (type === "choice") d.options = typedOptions();
+  return d;
+}
+
+let draftTimer = null;
+function queueDraft() {
+  if (!code) return;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(sendDraft, 200);   // 타이핑이 멈추면 바로 전송
+}
+
+async function sendDraft() {
+  if (!code) return;
+  const d = typedDraft();
+  await update(ref(db, `rooms/${code}/state`), { draft: d });
+  // 입력창을 지웠으면 초안에 달렸던 응답도 정리
+  if (!d) await remove(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
+}
+
+$("qText").addEventListener("input", queueDraft);
+$("qOpts").addEventListener("input", queueDraft);
+
+// 입력한 질문을 슬라이드로 굳히고, 학생 화면에는 그대로 계속 띄워둔다
+async function commitDraft() {
   const type = $("qType").value;
   const q = $("qText").value.trim();
   if (!q) { $("qText").focus(); return; }
   const slide = { type, q, order: slides.length, createdAt: serverTimestamp() };
   if (type === "choice") {
-    const opts = $("qOpts").value.split("\n").map(s => s.trim()).filter(Boolean);
-    if (opts.length < 2) { showErr("4지선다는 보기를 2개 이상 입력하세요."); return; }
+    const opts = typedOptions();
+    if (opts.length < 2) { showErr("4지선다는 보기를 2개 이상 입력하세요."); $("qOpts").focus(); return; }
     slide.options = opts;
   }
-  await push(ref(db, `rooms/${code}/slides`), slide);
+  clearTimeout(draftTimer);
+
+  const newOrder = slides.length;
+  const added = await push(ref(db, `rooms/${code}/slides`), slide);
+
+  // 타이핑 중에 이미 답한 학생이 있으면 그 응답을 새 슬라이드로 옮겨준다
+  const draftResp = await get(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
+  if (draftResp.exists()) {
+    await set(ref(db, `rooms/${code}/responses/${added.key}`), draftResp.val());
+  }
+  // 초안 해제와 슬라이드 띄우기를 한 번에 → 학생 화면이 깜빡이지 않는다
+  await update(ref(db, `rooms/${code}/state`), { currentOrder: newOrder, draft: null });
+  await remove(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
+
   $("qText").value = ""; $("qOpts").value = "";
   $("err").classList.add("hidden");
-};
+  $("qText").focus();
+  toast(`${newOrder + 1}번 슬라이드로 저장했어요 (학생 화면 그대로 유지)`);
+}
+
+$("addBtn").onclick = commitDraft;
+$("qText").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  // 4지선다인데 보기가 아직이면 보기 칸으로 보내준다
+  if ($("qType").value === "choice" && typedOptions().length < 2) { $("qOpts").focus(); return; }
+  commitDraft();
+});
+$("qOpts").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitDraft(); }
+});
 
 const SLIDE_LABELS = { yesno: "Yes/No", choice: "4지선다", open: "단답형", postit: "포스트잇" };
 let dragId = null;          // 드래그 중인 슬라이드 id
@@ -311,10 +384,10 @@ function updateNav() {
 }
 
 $("resetBtn").onclick = async () => {
-  const s = activeSlide();
-  if (!s) return;
+  const t = activeTarget();
+  if (!t) return;
   if (!confirm("이 질문의 응답을 모두 지우고 다시 받을까요?")) return;
-  await remove(ref(db, `rooms/${code}/responses/${s.id}`));
+  await remove(ref(db, `rooms/${code}/responses/${t.id}`));
 };
 
 // ---------- 참여자 명단 ----------
@@ -350,35 +423,57 @@ async function kickParticipant(uid, name) {
 
 function activeSlide() { return slides.find(s => s.order === currentOrder) || null; }
 
+// 학생 화면에 지금 보이는 것: 타이핑 중인 초안이 있으면 그게 우선, 없으면 진행 중 슬라이드
+function activeTarget() {
+  if (draft) {
+    return { id: DRAFT_ID, type: draft.type, q: draft.q, options: draft.options || [], isDraft: true };
+  }
+  return activeSlide();
+}
+
 function attachResponses() {
+  const t = activeTarget();
+  const id = t ? t.id : null;
+  if (id === respTargetId) return;      // 초안 글자만 바뀐 경우엔 다시 구독하지 않는다
   if (unsubResponses) { unsubResponses(); unsubResponses = null; }
+  respTargetId = id;
   responses = {};
-  const s = activeSlide();
-  if (!s) { renderResults(); return; }
-  unsubResponses = onValue(ref(db, `rooms/${code}/responses/${s.id}`), (snap) => {
+  if (!id) { renderResults(); return; }
+  unsubResponses = onValue(ref(db, `rooms/${code}/responses/${id}`), (snap) => {
     responses = snap.val() || {};
     renderResults();
   });
 }
 
 // ---------- 결과 렌더 ----------
+let stageKey = null;        // 무대를 다시 그릴지 판단 (질문 글자만 바뀌면 다시 그리지 않음)
+
 function renderStage() {
   updateNav();
-  const s = activeSlide();
+  const t = activeTarget();
   const stage = $("stage");
-  if (!s) {
+  if (!t) {
+    stageKey = null;
     $("progressLabel").textContent = "대기 중";
-    stage.innerHTML = `<div class="waiting">“다음 ›”을 누르면 첫 질문이 모두에게 표시됩니다.</div>`;
+    stage.innerHTML = `<div class="waiting">아래에 질문을 입력하면<br/>바로 학생 화면에 표시됩니다.</div>`;
     $("respCount").textContent = "0";
     return;
   }
-  $("progressLabel").textContent = `진행 ${s.order + 1} / ${slides.length}`;
-  stage.innerHTML = `<div class="question-title">${escapeHtml(s.q)}</div><div id="results"></div>`;
+  $("progressLabel").textContent = t.isDraft
+    ? "입력 중 · 학생 화면에 실시간 표시"
+    : `진행 ${t.order + 1} / ${slides.length}`;
+
+  const key = [t.id, t.type, (t.options || []).join("")].join("|");
+  if (key !== stageKey) {
+    stageKey = key;
+    stage.innerHTML = `<div class="question-title" id="stageQ"></div><div id="results"></div>`;
+  }
+  $("stageQ").textContent = t.q;
   renderResults();
 }
 
 function renderResults() {
-  const s = activeSlide();
+  const s = activeTarget();
   const box = $("results");
   if (!s || !box) return;
   // 현재 접속 중인 참여자의 응답만 집계 (나간 사람의 옛 답은 표시에서 제외)

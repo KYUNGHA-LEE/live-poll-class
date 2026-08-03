@@ -12,6 +12,8 @@ let uid = null;
 let slides = {};            // {id: slide}
 let currentOrder = -1;
 let myAnswers = {};         // {slideId: value}  (내 답)
+let draft = null;           // 강사가 지금 타이핑 중인 질문 (저장 전에도 바로 보인다)
+const DRAFT_ID = "__draft__";
 
 (async function boot() {
   if (configLooksUnset() && !DEMO) { showErr("⚠️ firebase-config.js 설정이 필요합니다 (README 참고)."); return; }
@@ -91,8 +93,10 @@ async function join(name, anon) {
     renderQuestion();
   });
 
-  onValue(ref(db, `rooms/${code}/state/currentOrder`), (snap) => {
-    currentOrder = snap.exists() ? snap.val() : -1;
+  onValue(ref(db, `rooms/${code}/state`), (snap) => {
+    const v = snap.val() || {};
+    currentOrder = typeof v.currentOrder === "number" ? v.currentOrder : -1;
+    draft = (v.draft && v.draft.q) ? v.draft : null;
     renderQuestion();
   });
 }
@@ -102,13 +106,25 @@ function activeSlide() {
   return entry ? { id: entry[0], ...entry[1] } : null;
 }
 
+// 강사가 타이핑 중이면 그 질문이 우선, 아니면 진행 중 슬라이드
+function activeTarget() {
+  if (draft) return { id: DRAFT_ID, type: draft.type, q: draft.q, options: draft.options || [] };
+  return activeSlide();
+}
+
 function submit(slideId, value) {
   set(ref(db, `rooms/${code}/responses/${slideId}/${uid}`), value);
 }
 
+// 강사가 질문을 한 글자씩 고치는 동안 답변칸이 통째로 다시 그려지면
+// 학생이 쓰던 글이 날아간다. 그래서 "무엇을 묻는 칸인지"가 바뀔 때만 다시 만들고,
+// 질문 글자만 바뀐 경우엔 제목과 선택 표시만 갱신한다.
+let renderedKey = null;
+
 function renderQuestion() {
-  const s = activeSlide();
+  const s = activeTarget();
   if (!s) {
+    renderedKey = null;
     $("waiting").classList.remove("hidden");
     $("qcard").classList.add("hidden");
     return;
@@ -116,6 +132,38 @@ function renderQuestion() {
   $("waiting").classList.add("hidden");
   $("qcard").classList.remove("hidden");
   $("qTitle").textContent = s.q;
+
+  const key = [s.id, s.type, (s.options || []).join("")].join("|");
+  if (key !== renderedKey) { renderedKey = key; buildAnswerArea(s); }
+  else refreshAnswerArea(s);
+}
+
+// 답을 이미 냈는지에 따라 선택 표시·버튼 글자만 살짝 고친다 (입력 중인 글은 건드리지 않음)
+function refreshAnswerArea(s) {
+  const mine = myAnswers[s.id];
+  $("doneMsg").classList.toggle("hidden", mine === undefined);
+  const area = $("answerArea");
+
+  if (s.type === "yesno") {
+    const selected = mine === undefined ? "no" : mine;
+    area.querySelectorAll("button[data-v]").forEach((b) => {
+      b.classList.toggle("selected", b.dataset.v === selected);
+    });
+  } else if (s.type === "choice") {
+    area.querySelectorAll("button[data-v]").forEach((b) => {
+      b.classList.toggle("selected", b.dataset.v === mine);
+    });
+  } else {
+    const btn = area.querySelector("button");
+    if (btn) {
+      btn.textContent = s.type === "postit"
+        ? (mine === undefined ? "📌 붙이기" : "✏️ 수정하기")
+        : (mine === undefined ? "제출" : "수정");
+    }
+  }
+}
+
+function buildAnswerArea(s) {
   const mine = myAnswers[s.id];
   $("doneMsg").classList.toggle("hidden", mine === undefined);
 
@@ -130,6 +178,7 @@ function renderQuestion() {
     for (const v of ["yes", "no"]) {
       const b = document.createElement("button");
       b.className = v + (selected === v ? " selected" : "");
+      b.dataset.v = v;
       b.textContent = v === "yes" ? "✅ Yes" : "⬜ No";
       b.onclick = () => submit(s.id, v);
       wrap.appendChild(b);
@@ -137,11 +186,21 @@ function renderQuestion() {
     area.appendChild(wrap);
 
   } else if (s.type === "choice") {
+    const opts = s.options || [];
+    if (!opts.length) {
+      // 강사가 아직 보기를 입력하는 중
+      const wait = document.createElement("p");
+      wait.className = "muted center";
+      wait.textContent = "보기를 기다리는 중…";
+      area.appendChild(wait);
+      return;
+    }
     const grid = document.createElement("div");
     grid.className = "choice-grid";
-    (s.options || []).forEach((opt) => {
+    opts.forEach((opt) => {
       const b = document.createElement("button");
       b.className = "choice-btn" + (mine === opt ? " selected" : "");
+      b.dataset.v = opt;
       b.textContent = opt;
       b.onclick = () => submit(s.id, opt);
       grid.appendChild(b);
