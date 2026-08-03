@@ -58,13 +58,13 @@
       </div>
 
       <!-- 참여자 명단 (참여 인원 클릭 시 토글) -->
-      <div id="ptPanel" class="card hidden">
+      <div id="ptPanel" class="card hidden" style="padding:20px 24px">
         <div class="row between">
-          <h2 style="margin:0">참여자 명단</h2>
-          <button class="ghost" id="ptClose" style="padding:8px 16px">닫기</button>
+          <h2 style="margin:0; font-size:20px">참여자 <span id="ptPanelCount">0</span>명</h2>
+          <button class="ghost" id="ptClose" style="padding:6px 16px; font-size:13px">닫기</button>
         </div>
-        <p class="muted" style="margin:6px 0 0">중복으로 들어온 참여자를 골라 <b>내보내기</b> 할 수 있어요. 내보내면 그 참여자의 응답도 함께 정리됩니다.</p>
-        <div id="ptList" style="margin-top:12px"></div>
+        <p class="muted" style="margin:4px 0 0; font-size:12px">×를 누르면 그 참여자와 응답이 함께 정리됩니다.</p>
+        <div id="ptList" class="pt-list"></div>
       </div>
 
       <div class="row" style="align-items:flex-start; gap:20px">

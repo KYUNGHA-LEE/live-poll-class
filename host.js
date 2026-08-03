@@ -463,25 +463,52 @@ $("resetBtn").onclick = async () => {
 $("ptToggle").onclick = () => { $("ptPanel").classList.toggle("hidden"); renderPtList(); };
 $("ptClose").onclick = () => $("ptPanel").classList.add("hidden");
 
+// 이름을 훑어보는 용도라 한 줄에 여러 명이 들어가는 작은 칩으로 보여준다.
 function renderPtList() {
   const list = $("ptList");
   if (!list || $("ptPanel").classList.contains("hidden")) return;
   const ids = Object.keys(participantsData);
-  if (!ids.length) { list.innerHTML = `<p class="muted">아직 참여자가 없습니다.</p>`; return; }
+  $("ptPanelCount").textContent = ids.length;
+  if (!ids.length) {
+    list.innerHTML = `<p class="muted" style="font-size:13px">아직 참여자가 없습니다.</p>`;
+    return;
+  }
+
+  // 같은 이름이 둘 이상일 때만 뒤에 짧은 식별자를 붙인다 (평소엔 이름만 보이게)
+  const nameCount = {};
+  for (const u of ids) {
+    const n = (participantsData[u] || {}).name || "익명";
+    nameCount[n] = (nameCount[n] || 0) + 1;
+  }
+
   list.innerHTML = "";
-  ids.forEach((uid) => {
+  for (const uid of ids) {
     const p = participantsData[uid] || {};
-    const row = document.createElement("div");
-    row.className = "slide-item";
-    const who = document.createElement("span");
-    who.innerHTML = `${p.anon ? "🕶" : "👤"} <b>${escapeHtml(p.name || "익명")}</b>` +
-      ` <span class="muted" style="font-size:12px">#${uid.slice(-4)}</span>`;
-    const del = document.createElement("button");
-    del.className = "danger"; del.textContent = "내보내기"; del.style.padding = "8px 14px";
-    del.onclick = () => kickParticipant(uid, p.name);
-    row.append(who, del);
-    list.appendChild(row);
-  });
+    const name = p.name || "익명";
+
+    const chip = document.createElement("span");
+    chip.className = "pt-chip";
+
+    const label = document.createElement("span");
+    label.textContent = (p.anon ? "🕶 " : "") + name;
+    if (nameCount[name] > 1) {
+      const tag = document.createElement("i");
+      tag.className = "pt-tag";
+      tag.textContent = "#" + uid.slice(-4);
+      label.appendChild(tag);
+    }
+
+    const kick = document.createElement("button");
+    kick.type = "button";
+    kick.className = "pt-kick";
+    kick.textContent = "×";
+    kick.title = `${name} 내보내기`;
+    kick.setAttribute("aria-label", `${name} 내보내기`);
+    kick.onclick = () => kickParticipant(uid, name);
+
+    chip.append(label, kick);
+    list.appendChild(chip);
+  }
 }
 
 async function kickParticipant(uid, name) {

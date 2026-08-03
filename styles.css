@@ -164,6 +164,26 @@ label {
 }
 .count-big { font-size: 52px; line-height: 1; }
 
+/* ---- 참여자 명단: 이름 훑어보기용 작은 칩 ---- */
+.pt-list {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 12px; max-height: 232px; overflow-y: auto;
+}
+.pt-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 6px 4px 14px;
+  font-size: 14px; font-weight: 500; white-space: nowrap;
+}
+.pt-tag { font-style: normal; font-size: 11px; color: var(--muted); margin-left: 5px; }
+button.pt-kick {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 17px; line-height: 1; padding: 3px 7px;
+  border-radius: var(--radius-pill);
+}
+button.pt-kick:hover { background: rgba(19,14,48,.09); color: var(--color-deep-ink); filter: none; }
+
 /* 학생 참여 코드 입력칸 */
 input[type=text].code-entry {
   font-size: 34px; font-weight: 800; letter-spacing: 6px;
