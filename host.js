@@ -42,18 +42,29 @@ const DRAFT_ID = "__draft__";  // 초안에 달린 응답을 모아두는 자리
     showErr("로그인 실패: Firebase 콘솔에서 '익명' 로그인을 켰는지 확인하세요. (" + e.message + ")");
     return;
   }
+  // 쓰던 세션이 있으면 그대로 이어간다 (수업 중 새로고침해도 코드가 안 바뀜)
   const saved = localStorage.getItem("livepoll_host_room");
   if (saved) {
     const snap = await get(ref(db, `rooms/${saved}/meta`));
     if (snap.exists()) { enterRoom(saved); return; }
   }
-  $("setup").classList.remove("hidden");
+  // 없으면 클릭 없이 바로 새 세션을 만들어 진행 화면으로 (버튼 한 번 줄이기)
+  try {
+    const fresh = await createRoom();
+    localStorage.setItem("livepoll_host_room", fresh);
+    enterRoom(fresh);
+  } catch (e) {
+    showErr("세션을 자동으로 만들지 못했어요. 아래 버튼으로 다시 시도해 주세요. (" + e.message + ")");
+    $("setup").classList.remove("hidden");
+  }
 })();
 
+// 자동 생성이 실패했을 때만 보이는 예비 버튼
 $("createBtn").onclick = async () => {
   try {
     code = await createRoom();
     localStorage.setItem("livepoll_host_room", code);
+    $("err").classList.add("hidden");
     enterRoom(code);
   } catch (e) {
     showErr("세션을 만들지 못했어요. 잠시 후 다시 시도해 주세요. (" + e.message + ")");
@@ -89,6 +100,18 @@ function enterRoom(roomCode) {
   $("joinLink").value = joinUrl;
   $("joinOpen").href = joinUrl;
   $("qr").src = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(joinUrl);
+
+  // 다음 수업용으로 코드를 새로 받는다 (리스너가 섞이지 않게 새로 읽어들임)
+  $("newRoomBtn").onclick = async () => {
+    if (!confirm("새 코드로 다시 시작할까요?\n지금 코드로 들어온 학생들은 새 코드로 다시 입장해야 합니다.")) return;
+    try {
+      const fresh = await createRoom();
+      localStorage.setItem("livepoll_host_room", fresh);
+      location.reload();
+    } catch (e) {
+      showErr("새 세션을 만들지 못했어요. 잠시 후 다시 시도해 주세요. (" + e.message + ")");
+    }
+  };
 
   $("copyBtn").onclick = async () => {
     try { await navigator.clipboard.writeText(joinUrl); }
@@ -131,7 +154,7 @@ function enterRoom(roomCode) {
 
   // 새로고침으로 다시 들어왔으면 입력창은 비어 있으니 남아 있던 초안도 정리
   update(ref(db, `rooms/${code}/state`), { draft: null });
-  remove(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
+  clearResponses(DRAFT_ID);
 }
 
 // ---------- 질문 입력 (타이핑 → 학생 화면 실시간, Enter → 슬라이드 저장) ----------
@@ -166,10 +189,16 @@ async function sendDraft() {
   const d = typedDraft();
   await update(ref(db, `rooms/${code}/state`), { draft: d });
   // 입력창을 지웠으면 초안에 달렸던 응답도 정리
-  if (!d) await remove(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
+  if (!d) await clearResponses(DRAFT_ID);
 }
 
-$("qText").addEventListener("input", queueDraft);
+// 저장 직후 잠깐. 한글 IME 가 Enter 뒤에 조합 중이던 글자를 다시 밀어넣는 걸 걸러낸다.
+let swallowUntil = 0;
+
+$("qText").addEventListener("input", () => {
+  if (performance.now() < swallowUntil) { $("qText").value = ""; }
+  queueDraft();
+});
 $("qOpts").addEventListener("input", queueDraft);
 
 // 입력한 질문을 슬라이드로 굳히고, 학생 화면에는 그대로 계속 띄워둔다
@@ -190,29 +219,58 @@ async function commitDraft() {
 
   // 타이핑 중에 이미 답한 학생이 있으면 그 응답을 새 슬라이드로 옮겨준다
   const draftResp = await get(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
-  if (draftResp.exists()) {
-    await set(ref(db, `rooms/${code}/responses/${added.key}`), draftResp.val());
-  }
+  if (draftResp.exists()) await copyResponses(draftResp.val(), added.key);
   // 초안 해제와 슬라이드 띄우기를 한 번에 → 학생 화면이 깜빡이지 않는다
   await update(ref(db, `rooms/${code}/state`), { currentOrder: newOrder, draft: null });
-  await remove(ref(db, `rooms/${code}/responses/${DRAFT_ID}`));
+  await clearResponses(DRAFT_ID);
 
   $("qText").value = ""; $("qOpts").value = "";
+  swallowUntil = performance.now() + 250;   // IME 잔여 글자 방어
   $("err").classList.add("hidden");
   $("qText").focus();
   toast(`${newOrder + 1}번 슬라이드로 저장했어요 (학생 화면 그대로 유지)`);
 }
 
-$("addBtn").onclick = commitDraft;
-$("qText").addEventListener("keydown", (e) => {
-  if (e.key !== "Enter") return;
-  e.preventDefault();
-  // 4지선다인데 보기가 아직이면 보기 칸으로 보내준다
+// 4지선다인데 보기가 아직이면 저장하지 않고 보기 칸으로 보내준다
+function commitOrGoToOptions() {
   if ($("qType").value === "choice" && typedOptions().length < 2) { $("qOpts").focus(); return; }
   commitDraft();
+}
+
+$("addBtn").onclick = commitOrGoToOptions;
+
+// 한글은 Enter 로 조합을 확정하기 때문에, 조합 중 Enter 는 곧바로 저장하지 않고
+// 조합이 끝난(compositionend) 다음에 저장한다. 그래야 질문 칸이 확실히 비워진다.
+let commitAfterCompose = false;
+$("qText").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  if (e.isComposing) { commitAfterCompose = true; return; }   // IME 확정은 막지 않는다
+  e.preventDefault();
+  commitOrGoToOptions();
 });
+$("qText").addEventListener("compositionend", () => {
+  if (!commitAfterCompose) return;
+  commitAfterCompose = false;
+  setTimeout(commitOrGoToOptions, 0);   // 확정된 글자가 값에 들어온 뒤에 저장
+});
+
+// 보기 칸의 Enter: 보기를 다 넣었으면 줄바꿈 대신 저장으로 넘어간다.
+//  - 보기가 4개가 됐으면 그 다음 Enter가 곧 저장
+//  - 빈 줄에서 Enter 를 눌러도 저장 (보기 2~3개만 쓰는 경우)
 $("qOpts").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitDraft(); }
+  if (e.key !== "Enter" || e.isComposing) return;
+  if (e.ctrlKey || e.metaKey) { e.preventDefault(); commitDraft(); return; }
+
+  const ta = $("qOpts");
+  const upto = ta.value.slice(0, ta.selectionStart);
+  const caretLine = upto.slice(upto.lastIndexOf("\n") + 1);
+  const opts = typedOptions();
+
+  if (opts.length >= 4 || (caretLine.trim() === "" && opts.length >= 2)) {
+    e.preventDefault();
+    commitDraft();
+  }
+  // 그 외에는 그냥 줄바꿈 (보기를 계속 적는 중)
 });
 
 const SLIDE_LABELS = { yesno: "Yes/No", choice: "4지선다", open: "단답형", postit: "포스트잇" };
@@ -359,7 +417,7 @@ async function deleteSlide(s) {
   nextOrder = Math.max(-1, Math.min(nextOrder, remaining.length - 1));
 
   await remove(ref(db, `rooms/${code}/slides/${s.id}`));
-  await remove(ref(db, `rooms/${code}/responses/${s.id}`));
+  await clearResponses(s.id);
   await Promise.all(remaining.map((slide, order) => (
     slide.order === order
       ? Promise.resolve()
@@ -383,11 +441,22 @@ function updateNav() {
   $("nextBtn").disabled = currentOrder >= slides.length - 1; // 마지막(또는 슬라이드 없음)
 }
 
+// 전체 초기화: 질문·응답을 모두 지우고 학생 화면을 대기 화면으로 되돌린다.
+// (참여자는 그대로 둬서 학생들이 이름을 다시 넣지 않아도 된다)
 $("resetBtn").onclick = async () => {
-  const t = activeTarget();
-  if (!t) return;
-  if (!confirm("이 질문의 응답을 모두 지우고 다시 받을까요?")) return;
-  await remove(ref(db, `rooms/${code}/responses/${t.id}`));
+  if (!confirm("질문과 응답을 모두 지우고 처음부터 다시 시작할까요?\n학생 화면은 대기 화면으로 돌아갑니다.")) return;
+  clearTimeout(draftTimer);
+  $("qText").value = ""; $("qOpts").value = "";
+  editingId = null;
+  try {
+    await clearResponses();
+    await remove(ref(db, `rooms/${code}/slides`));
+    await set(ref(db, `rooms/${code}/state`), { currentOrder: -1, draft: null });
+    $("err").classList.add("hidden");
+    toast("전체 초기화했어요");
+  } catch (e) {
+    showErr("초기화 중 문제가 생겼어요. 다시 시도해 주세요. (" + e.message + ")");
+  }
 };
 
 // ---------- 참여자 명단 ----------
@@ -419,6 +488,32 @@ async function kickParticipant(uid, name) {
   if (!confirm(`'${name || "익명"}' 참여자를 내보낼까요? (응답도 함께 정리됩니다)`)) return;
   await remove(ref(db, `rooms/${code}/participants/${uid}`));
   for (const s of slides) await remove(ref(db, `rooms/${code}/responses/${s.id}/${uid}`));
+}
+
+// 보안 규칙은 responses/<슬라이드>/<학생> 단위로만 쓰기를 허용한다.
+// 그래서 responses/<슬라이드> 를 통째로 지우면 거부당한다 → 실제로 있는 응답을 읽어 하나씩 지운다.
+async function clearResponses(slideId) {
+  const base = `rooms/${code}/responses`;
+  const path = slideId ? `${base}/${slideId}` : base;
+  const snap = await get(ref(db, path));
+  if (!snap.exists()) return;
+  const val = snap.val() || {};
+  const jobs = [];
+  if (slideId) {
+    for (const u of Object.keys(val)) jobs.push(remove(ref(db, `${base}/${slideId}/${u}`)));
+  } else {
+    for (const [sid, byUser] of Object.entries(val)) {
+      for (const u of Object.keys(byUser || {})) jobs.push(remove(ref(db, `${base}/${sid}/${u}`)));
+    }
+  }
+  await Promise.all(jobs);
+}
+
+// 같은 이유로, 응답을 옮길 때도 학생 단위로 써야 한다.
+async function copyResponses(fromMap, toSlideId) {
+  await Promise.all(Object.entries(fromMap || {}).map(([u, v]) => (
+    set(ref(db, `rooms/${code}/responses/${toSlideId}/${u}`), v)
+  )));
 }
 
 function activeSlide() { return slides.find(s => s.order === currentOrder) || null; }
@@ -459,9 +554,7 @@ function renderStage() {
     $("respCount").textContent = "0";
     return;
   }
-  $("progressLabel").textContent = t.isDraft
-    ? "입력 중 · 학생 화면에 실시간 표시"
-    : `진행 ${t.order + 1} / ${slides.length}`;
+  $("progressLabel").textContent = t.isDraft ? "" : `진행 ${t.order + 1} / ${slides.length}`;
 
   const key = [t.id, t.type, (t.options || []).join("")].join("|");
   if (key !== stageKey) {
