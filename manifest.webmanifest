@@ -1,0 +1,13 @@
+{
+  "name": "라이브 폴 · 실시간 설문조사",
+  "short_name": "라이브 폴",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f9fbf2",
+  "theme_color": "#ffe228",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "maskable" }
+  ]
+}

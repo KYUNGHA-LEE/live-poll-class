@@ -129,7 +129,8 @@ npx serve .
 | `database.rules.json` / `firebase.json` | Realtime Database 보안 규칙 배포 설정 |
 | `util.js` | 한국어 단어 추출 + 워드클라우드 렌더 |
 | `styles.css` | 스타일 |
-| `favicon.svg` / `favicon.ico` / `apple-touch-icon.png` | 파비콘 (대기 화면 캐릭터 얼굴) |
+| `favicon.svg` / `favicon.ico` / `icon-*.png` / `apple-touch-icon.png` | 파비콘 (대기 화면 캐릭터 얼굴) |
+| `manifest.webmanifest` | 아이콘·이름 선언 (북마크·홈 화면 아이콘 인식용) |
 | `tools/make-favicon.py` | `.ico` / `.png` 파비콘을 다시 굽는 스크립트 |
 
 > 파비콘 그림을 바꾸려면 `favicon.svg` 를 고치고, `tools/make-favicon.py` 안의 같은 좌표도 맞춘 뒤 아래를 실행하세요.

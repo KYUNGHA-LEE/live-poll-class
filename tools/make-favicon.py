@@ -39,4 +39,8 @@ if __name__ == "__main__":
     # iOS 홈 화면 아이콘: 알파 없이 꽉 찬 정사각형 (모서리는 iOS가 깎는다)
     render(180, radius=0).convert("RGB").save(f"{out}/apple-touch-icon.png")
     render(256).save(f"{out}/favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
+    # PNG 아이콘 — SVG 파비콘을 무시하는 환경(북마크 목록 등)을 위한 보험
+    render(32).save(f"{out}/icon-32.png")
+    render(192).save(f"{out}/icon-192.png")
+    render(512).save(f"{out}/icon-512.png")
     print("ok")
